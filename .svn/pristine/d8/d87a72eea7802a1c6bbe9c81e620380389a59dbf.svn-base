@@ -1,0 +1,425 @@
+package com.tenpay.wxwork.salary.provider.admin;
+
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.tenpay.wxwork.salary.common.BizError;
+import com.tenpay.wxwork.salary.common.BizException;
+import com.tenpay.wxwork.salary.common.utils.AesUtil;
+import com.tenpay.wxwork.salary.common.utils.BankConfKey;
+import com.tenpay.wxwork.salary.common.utils.Constant;
+import com.tenpay.wxwork.salary.dao.SalaryBankConfDAO;
+import com.tenpay.wxwork.salary.dao.SalaryOverViewDAO;
+import com.tenpay.wxwork.salary.dto.FrontEndResponse;
+import com.tenpay.wxwork.salary.dto.admin.*;
+import com.tenpay.wxwork.salary.model.SalaryBankConfInfo;
+import com.tenpay.wxwork.salary.model.SalaryCorpConfInfo;
+import com.tenpay.wxwork.salary.model.SalaryFields;
+import com.tenpay.wxwork.salary.model.SessionInfo;
+import com.tenpay.wxwork.salary.service.KeyCacheService;
+import com.tenpay.wxwork.salary.service.SessionService;
+import com.tenpay.wxwork.salary.service.admin.DownLoadSalaryService;
+import com.tenpay.wxwork.salary.service.admin.SalaryFieldsService;
+import com.tenpay.wxwork.salary.service.admin.SalaryOverViewService;
+import com.tenpay.wxwork.salary.service.h5.QuerySalaryDetailService;
+import com.tenpay.wxwork.salary.util.download.ExcelDownloader;
+import com.tenpay.wxwork.salary.util.download.ExcelUtil;
+import com.tenpay.wxwork.salary.service.IdGenerator;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by hxyh on 2018/8/22.
+ */
+@RestController
+@RequestMapping("/admin")
+public class DownLoadSalaryController {
+
+    private final static Logger LOGGER = LoggerFactory.getLogger(DownLoadSalaryController.class);
+
+    @Autowired
+    private DownLoadSalaryService downLoadService;
+
+    @Autowired
+    private SessionService sessionService;
+
+    @Autowired
+    private IdGenerator idGenerator;
+
+    @Autowired
+    private QuerySalaryDetailService querySalaryDetailService;
+
+    @Autowired
+    private KeyCacheService keyCacheService;
+
+    @Autowired
+    private SalaryFieldsService salaryFieldsService;
+
+    @Autowired
+    private SalaryOverViewService salaryOverViewService;
+    
+	@Autowired
+	private SalaryBankConfDAO salaryBankConfDAO;
+
+    @PostMapping(value = "/export_salary_chart", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public void exportSalary(@CookieValue("ssid") String ssid, @RequestParam("format") String format, HttpServletRequest request, HttpServletResponse response, @RequestBody DownLoadSalaryReq downLoadSalaryReq) throws Exception {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpId = session.getCorpId();
+        downLoadSalaryReq.setF_corpId(corpId);
+        if (format.equals("xls")) {
+            if (downLoadSalaryReq.getMonth() == null || "".equals(downLoadSalaryReq.getMonth())) {
+                throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+            }
+            downLoadService.exportExcel03(request, response, downLoadSalaryReq);
+        } else if (format.equals("xlsx")) {
+            new ExcelDownloader(this.downLoadService, "exportExcel07", DownLoadSalaryReq.class).setArgs(downLoadSalaryReq).downloadByExplorer();
+        } else if (format.equals("vbsv")) {
+            if (downLoadSalaryReq.getMonth() == null || "".equals(downLoadSalaryReq.getMonth())) {
+                throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+            }
+            downLoadService.exportCsv(response, downLoadSalaryReq);
+        }  else if (format.equals("tempDefinedDetail")) {
+            SalaryDetailInfo salaryDetailInfo = new SalaryDetailInfo();
+            salaryDetailInfo.setFcorpid(corpId);
+            downLoadService.exportDefinedSalaryDetail(request, response, salaryDetailInfo);
+        } else if (format.equals("tempCmb")) {
+            SalaryAccountForCmbInfo salaryAccountForCmbInfo = new SalaryAccountForCmbInfo();
+            salaryAccountForCmbInfo.setFcorpid(corpId);
+            new ExcelDownloader(this.downLoadService, "querySalaryAccountForCmb", SalaryAccountForCmbInfo.class).setArgs(salaryAccountForCmbInfo).downloadByExplorer();
+        }
+    }
+
+    @PostMapping(value = "/export_salary_detail_chart", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public void querySalaryDetailBack(@CookieValue("ssid") String ssid, @RequestParam("format") String format, @RequestParam("month") String month, HttpServletRequest request, HttpServletResponse response) throws Exception {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpId = session.getCorpId();
+        if (format.equals("detailBack")) {
+            SalaryDetailBackInfo salaryDetailBackInfo = new SalaryDetailBackInfo();
+            salaryDetailBackInfo.setFcorpid(AesUtil.encryptSalary(corpId, corpId));
+            salaryDetailBackInfo.setUnfcorpid(corpId);
+            salaryDetailBackInfo.setFmonth(month);
+            new ExcelDownloader(this.downLoadService, "querySalaryDetailBackInfo", SalaryDetailBackInfo.class).setArgs(salaryDetailBackInfo).downloadByExplorer();
+        }
+    }
+
+    //TODO UPDATE 以下为适应企业过渡版本
+    @RequestMapping(value = "/query_salary_confirm_state",
+            method = RequestMethod.POST,
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object querySalaryConfirm(@CookieValue("ssid") String ssid, @RequestParam("month") String month) {
+        LOGGER.debug("query salary confirm state");
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        return querySalaryDetailService.querySalaryConfirmState(ssid, month);
+    }
+
+    //企业自定义发薪明细
+    @PostMapping(value = "/import_defined_salary_detail_excel")
+    public Object uploadDefinedSalaryDetailExcel(@RequestParam("file") MultipartFile file, @RequestParam("month") String month,
+                                                 @RequestParam("batch_no") String batch_no, @CookieValue("ssid") String ssid) throws Exception {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String userid = session.getUserId();
+        String corpid = session.getCorpId();
+        int batchno;
+        if (batch_no == null || "".equals(batch_no)){
+            batchno = salaryOverViewService.queryCorpMaxBatchno(corpid, month) + 1;
+        }else {
+            batchno = Integer.parseInt(batch_no);
+        }
+        //文件格式校验
+        ArrayList<String> listField = new ArrayList<String>();
+        listField.add(Constant.DEFINED_SEQUENCE_NUMBER);
+        listField.add(Constant.DEFINED_NAME);
+        listField.add(Constant.DEFINED_CORP_WX_ID);
+        SalaryFields salaryFields = salaryFieldsService.SelectSalaryFieldsTemplate(corpid,SalaryFields.TemplateSelect.NO.toString());
+        if (salaryFields == null) {
+            //文件格式错误
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_ERR.errorCode(), BizError.UPLOAD_FILE_EXCEL_ERR.errorMsg());
+        }
+        String jsonmessage_salary = salaryFields.getSalaryFields();
+        String jsonmessage_deduction = salaryFields.getDeductionFields();
+        // 首先把字符串转成 JSONArray 对象
+        JSONArray json_salary = JSONArray.parseArray(jsonmessage_salary);
+        int salarySize = 0;
+        int deductionSize = 0;
+        if (json_salary != null && json_salary.size() > 0) {
+            salarySize = json_salary.size();
+            for (int i = 0; i < salarySize; i++) {
+                // 遍历 jsonarray 数组，把每一个对象转成 json 对象
+                JSONObject job = json_salary.getJSONObject(i);
+                // 得到 每个对象中的属性值
+                String value = job.get("salary").toString();
+                listField.add("SALARY-" + value);
+            }
+        }
+        listField.add(Constant.DEFINED_SALARY_TALL);
+        JSONArray json_deduction = JSONArray.parseArray(jsonmessage_deduction);
+        if (json_deduction != null && json_deduction.size() > 0) {
+            deductionSize = json_deduction.size();
+            for (int i = 0; i < deductionSize; i++) {
+                JSONObject job = json_deduction.getJSONObject(i);
+                String value = job.get("deduction").toString();
+                listField.add("DEDUCTION-" + value);
+            }
+        }
+        listField.add(Constant.DEFINED_DEDUCTION_TALL);
+        listField.add(Constant.DEFINED_ACTION_SALARY);
+        listField.add(Constant.DEFINED_REMARK);
+        if (salarySize == 0 || deductionSize == 0) {
+            //文件格式错误
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_ERR.errorCode(), BizError.UPLOAD_FILE_EXCEL_ERR.errorMsg());
+        }
+        ArrayList<LinkedHashMap<String, String>> salaryDetailList = ExcelUtil.fromDefinedExcel(file, 0, 1, 0, listField, salarySize, deductionSize);
+        if (salaryDetailList == null) {
+            //文件格式错误
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_ERR.errorCode(), BizError.UPLOAD_FILE_EXCEL_ERR.errorMsg());
+        }
+        if (salaryDetailList.size() == 0) {
+            //文件内容为空
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_CONTENT_NULL.errorCode(), BizError.UPLOAD_FILE_EXCEL_CONTENT_NULL.errorMsg());
+        }
+        //将数据入库
+        downLoadService.insertDefinedSalaryDetailList(salaryDetailList, month, corpid, userid, batchno);
+        return new SalaryDetailInfoResponse(String.valueOf(batchno));
+    }
+
+    //适配版
+    @RequestMapping(value = "/query_user_salary_confirm_state",
+            method = RequestMethod.POST,
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object queryUserSalaryConfirm(@CookieValue("ssid") String ssid, @RequestParam("month") String month, @RequestBody SalaryConfirm salaryConfirm) {
+        LOGGER.debug("query user salary confirm state");
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        if (month == null || "".equals(month)) {
+            throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        int pageNum = salaryConfirm.getPageNum();
+        int pageSize = salaryConfirm.getPageSize();
+        return querySalaryDetailService.queryUserSalaryConfirmState(ssid, month, pageNum, pageSize);
+    }
+
+    /**
+     * 招行绑卡模式 批量导入用户信息,实现绑卡操作
+     *
+     * @param file
+     * @param ssid
+     * @return
+     * @throws Exception
+     */
+    @PostMapping(value = "/import_salary_account_cmb_excel")
+    public Object uploadCmbSalaryAccountExcel(@RequestParam("file") MultipartFile file, @CookieValue("ssid") String ssid) throws Exception {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpid = session.getCorpId();
+        //文件格式校验
+        List<SalaryAccountForCmbInfo> forCmbInfoList = ExcelUtil.fromExcel(file, 0, 1, 0, new SalaryAccountForCmbInfo().getClass());
+        if (forCmbInfoList == null) {
+            //文件格式错误
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_ERR.errorCode(), BizError.UPLOAD_FILE_EXCEL_ERR.errorMsg());
+        }
+        if (forCmbInfoList.size() == 0) {
+            //文件内容为空
+            throw new BizException(BizError.UPLOAD_FILE_EXCEL_CONTENT_NULL.errorCode(), BizError.UPLOAD_FILE_EXCEL_CONTENT_NULL.errorMsg());
+        }
+        //防止解析EXCEL时自动加入空行
+        if (forCmbInfoList.get(forCmbInfoList.size() - 1).getFsequence_number() < 0) {
+            forCmbInfoList.remove(forCmbInfoList.size() - 1);
+        }
+        //将数据入库
+        downLoadService.updateSalaryAccountForCmb(forCmbInfoList, corpid);
+        return new FrontEndResponse();
+    }
+
+    /**
+     * 工资明细上传预览
+     *
+     * @param ssid
+     * @return
+     */
+    @RequestMapping(value = "/view_salary_all_detail", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object viewSalaryAllDetail(@CookieValue("ssid") String ssid, @RequestBody ViewSalaryAllDetail viewSalaryAllDetail) {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        String month = viewSalaryAllDetail.getMonth();
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        if (month == null || "".equals(month)) {
+            throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+        }
+        String corpid = session.getCorpId();
+        viewSalaryAllDetail = downLoadService.viewSalaryAllDetail(month, corpid, viewSalaryAllDetail.getBatch_no());
+        SalaryCorpConfInfo salaryCorpConfInfo = downLoadService.getSalaryCorpConfByBankname(corpid);
+        String corpToBank = "";
+        if (salaryCorpConfInfo != null) {
+            corpToBank = salaryCorpConfInfo.getValue();
+        }
+        return new ViewSalaryAllDetailResponse(viewSalaryAllDetail.getCounter(), viewSalaryAllDetail.getSalaryAll(),
+                viewSalaryAllDetail.getSalarySum(), viewSalaryAllDetail.getMonth(), corpToBank);
+    }
+
+    /**
+     * 发送工资明细通知用户
+     *
+     * @param ssid
+     * @param salaryOverViewInfo
+     * @return
+     */
+    @RequestMapping(value = "/send_msg_to_notice_user", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object sendMsgToNoticeUser(@CookieValue("ssid") String ssid, @RequestBody SalaryOverViewInfo salaryOverViewInfo) {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        String month = salaryOverViewInfo.getMonth();
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        if (month == null || "".equals(month)) {
+            throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+        }
+        String corpid = session.getCorpId();
+
+        //通知用户薪资已到账
+        String uRetCode = downLoadService.sendMsgToNoticeUser(corpid, month, salaryOverViewInfo.getBatch_no());
+        if (!uRetCode.equals("0")) {
+            return new FrontEndResponse(uRetCode, "此月份暂无工资明细通知！");
+
+        } else {
+            return new FrontEndResponse(uRetCode, "发送成功！");
+        }
+
+    }
+
+    /**
+     * 发送工资信息到银行
+     * @param ssid
+     * @param salaryOverViewInfo
+     * @return
+     */
+    @RequestMapping(value = "/send_salaryinfo_to_bank", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object sendSalaryinfoToBank(@CookieValue("ssid") String ssid, @RequestBody SalaryOverViewInfo salaryOverViewInfo) {
+    	if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+    	
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null || !"CMB".equals(session.getBankSname())) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+
+        String month = salaryOverViewInfo.getMonth();
+        if (month == null || "".equals(month)) {
+            throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+        }
+        
+        SalaryApprovalResponse response = downLoadService.sendSalaryToFlow(session.getCorpId(), month, salaryOverViewInfo.getBatch_no(), session);
+        if ("0".equals(response.getRetCode()))
+		{
+			return new SalaryApprovalStateResponse("0", "OK", "0");
+		}
+		else
+		{
+			return new SalaryApprovalStateResponse("0", response.getErrMsg(), response.getRetCode());
+		}
+    }
+    
+
+    /**
+     * 获取企业所对应的银行
+     *
+     * @param ssid
+     * @return
+     */
+    @RequestMapping(value = "/get_corp_to_Bank", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object getCorpToBank(@CookieValue("ssid") String ssid) {
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpid = session.getCorpId();
+        SalaryCorpConfInfo salaryCorpConfInfo = downLoadService.getSalaryCorpConfByBankname(corpid);
+        
+        if (salaryCorpConfInfo == null) {
+        	throw new BizException(BizError.CORP_CONF_ERROR.errorCode(),BizError.CORP_CONF_ERROR.errorMsg());
+            
+        }
+        
+        String bankName = salaryCorpConfInfo.getValue();
+        
+        //查询银行配置信息
+		SalaryBankConfInfo salaryBankConfInfo = salaryBankConfDAO.querySalaryCorpConfInfo(salaryCorpConfInfo.getValue(), BankConfKey.BANK_TYPE, SalaryBankConfInfo.State.AUDITED.name());
+		if(salaryBankConfInfo == null){
+			throw new BizException(BizError.BANK_CONF_ERROR.errorCode(),BizError.BANK_CONF_ERROR.errorMsg());
+		}
+		//存入session
+		session.setBankSname(salaryCorpConfInfo.getValue());
+		session.setBankType(salaryBankConfInfo.getValue());
+		
+        return new SalaryCorpConfInfoResponse(bankName);
+    }
+
+    @RequestMapping(value = "/get_user_change", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object getUserChange(@CookieValue("ssid") String ssid,@RequestBody UserChangeResponse userChangeResponse){
+        SessionInfo session = sessionService.getSession(ssid);
+        String month = userChangeResponse.getMonth();
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        if (month == null || "".equals(month)) {
+            throw new BizException(BizError.PLEASE_SELECT_MONTH.errorCode(), BizError.PLEASE_SELECT_MONTH.errorMsg());
+        }
+        UserChangeResponse ucr = downLoadService.getUserChange(session.getCorpId(), month);
+        return ucr;
+    }
+}

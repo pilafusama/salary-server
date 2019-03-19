@@ -1,0 +1,171 @@
+package com.tenpay.wxwork.salary.service;
+
+import com.tenpay.wxwork.salary.common.BizError;
+import com.tenpay.wxwork.salary.common.BizException;
+import com.tenpay.wxwork.salary.common.utils.BankConfKey;
+import com.tenpay.wxwork.salary.common.utils.Constant;
+import com.tenpay.wxwork.salary.common.utils.CorpConfKey;
+import com.tenpay.wxwork.salary.dao.*;
+import com.tenpay.wxwork.salary.model.*;
+
+import com.google.gson.JsonObject;
+import com.tenpay.wxwork.wxworklib.client.WxworkHttpClient;
+import com.tenpay.wxwork.wxworklib.exception.WxworkException;
+import com.tenpay.wxwork.wxworklib.service.AuthService;
+import com.tenpay.wxwork.wxworklib.service.WxAccessTokenService;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
+import java.util.Date;
+
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * 企业授权服务
+ */
+@Service
+public class CorpAuthService extends AuthService {
+
+    private final static Logger LOGGER = LoggerFactory.getLogger(CorpAuthService.class);
+
+    @Resource
+    private WxAccessTokenService wxAccessTokenService;
+
+    @Autowired
+    private CorpInfoDAO corpInfoDAO;
+
+    @Autowired
+    private CorpAuthenDAO corpAuthenDAO;
+
+    @Autowired
+    private MchInfoDAO mchInfoDAO;
+
+    @Autowired
+    private SalaryBankConfDAO salaryBankConfDAO;
+
+    @Autowired
+    private SalaryCorpConfDAO salaryCorpConfDAO;
+
+    @Override
+    public void createAuth(String suiteId, String authCode) {
+        createAuth(suiteId, authCode, null);
+    }
+
+    @Override
+    public void createAuth(String suiteId, String authCode, String mchId) {
+        LOGGER.info("create auth for corp, mchId: {}", mchId);
+        // 1.获取企业永久授权码
+        JsonObject result = wxworkHttpClient.getPermanentCode(suiteId, authCode);
+
+        // 2.更新企业信息及授权状态
+        JsonObject corpAuthInfo = result.get("auth_corp_info").getAsJsonObject();
+        String corpId = corpAuthInfo.get("corpid").getAsString();
+
+        LOGGER.info("save corp info");
+        CorpInfo corpInfo = corpInfoDAO.queryCorpByCorpid(corpId);
+        if (null == corpInfo) {
+            corpInfoDAO.insertCorpWhenAuth(corpId,
+                                           CorpInfo.CORP_STATUS_AUTHED,
+                                           corpAuthInfo.get("corp_name").getAsString(),
+                                           corpAuthInfo.get("corp_full_name").getAsString(),
+                                           corpAuthInfo.get("corp_type").getAsString(),
+                                           corpAuthInfo.get("subject_type").getAsInt(),
+                                           corpAuthInfo.get("corp_square_logo_url").getAsString(),
+                                           corpAuthInfo.get("corp_user_max").getAsInt(),
+                                           corpAuthInfo.get("verified_end_time").getAsString(),
+                                           corpAuthInfo.get("corp_wxqrcode").getAsString(),
+                                           suiteId);
+        } else {
+            corpInfoDAO.updateCorpWhenAuth(corpId,
+                                           CorpInfo.CORP_STATUS_AUTHED,
+                                           corpAuthInfo.get("corp_name").getAsString(),
+                                           corpAuthInfo.get("corp_full_name").getAsString(),
+                                           corpAuthInfo.get("corp_type").getAsString(),
+                                           corpAuthInfo.get("subject_type").getAsInt(),
+                                           corpAuthInfo.get("corp_square_logo_url").getAsString(),
+                                           corpAuthInfo.get("corp_user_max").getAsInt(),
+                                           corpAuthInfo.get("verified_end_time").getAsString(),
+                                           corpAuthInfo.get("corp_wxqrcode").getAsString());
+            //注册回调的时候在t_corp_info中存入了商户信息(银行)
+            MchInfo mchInfo = mchInfoDAO.queryMchInfo(corpInfo.getSrcMchId());
+            if(mchInfo != null){
+                mchId = mchInfo.getFmchId();
+            }
+        }
+        //企业已注册时传入mchid
+        if(mchId != null && !"".equals(mchId)){
+            //根据商户信息获取银行bankSname
+            SalaryBankConfInfo salaryBankConfInfo = salaryBankConfDAO.querySalaryBankSname(BankConfKey.MCH_ID, mchId, BankConfKey.AUDITED_STATE);
+            if(salaryBankConfInfo == null){
+                throw new BizException(BizError.BANK_CONF_ERROR);
+            }
+            String bank_sname = salaryBankConfInfo.getBank_sname();
+            //将银行信息存入企业配置表
+            SalaryCorpConfInfo salaryCorpConfInfo = salaryCorpConfDAO.querySalaryCorpConfInfo(corpId, CorpConfKey.CORP_TO_BANK, CorpConfKey.AUDITED_STATE);
+            if(null == salaryCorpConfInfo){
+                salaryCorpConfDAO.insertCorpConf(corpId, CorpConfKey.AUDITED_STATE, CorpConfKey.CONF, CorpConfKey.CORP_TO_BANK, bank_sname);
+            }else {
+                salaryCorpConfDAO.updateCorpConf(corpId, CorpConfKey.AUDITED_STATE, CorpConfKey.CONF, CorpConfKey.CORP_TO_BANK, bank_sname);
+            }
+        }
+
+        /**
+         * agent 是以前旧套件的，会有多个应用，现在理解成一个就可以了~
+         * agent 中包含的信息就是第三方应用在企业授权后的相关信息及权限，比如 agentid 对不同的企业不同
+         *
+         */
+        JsonObject agent = result.get("auth_info").getAsJsonObject().get("agent")
+                           .getAsJsonArray().get(0).getAsJsonObject();
+        JsonObject privilege = agent.get("privilege").getAsJsonObject();
+
+        LOGGER.info("save corp auth info");
+        CorpAuthen corpAuthen = corpAuthenDAO.queryByCorpidAndSuiteId(corpId, suiteId);
+        if (null == corpAuthen) {
+            corpAuthenDAO.insertWhenAuth(corpId,
+                                         suiteId,
+                                         agent.get("agentid").getAsInt(),
+                                         CorpAuthen.AUTH_STATUS_AUTHED,
+                                         result.get("permanent_code").getAsString(),
+                                         privilege.get("level").getAsInt(),
+                                         privilege.get("allow_party").getAsJsonArray().toString(),
+                                         privilege.get("allow_tag").getAsJsonArray().toString(),
+                                         privilege.get("allow_user").getAsJsonArray().toString(),
+                                         privilege.get("extra_party").getAsJsonArray().toString(),
+                                         privilege.get("extra_tag").getAsJsonArray().toString(),
+                                         privilege.get("extra_user").getAsJsonArray().toString());
+        } else {
+            corpAuthenDAO.updateWhenAuth(corpId,
+                                         suiteId,
+                                         agent.get("agentid").getAsInt(),
+                                         CorpAuthen.AUTH_STATUS_AUTHED,
+                                         result.get("permanent_code").getAsString(),
+                                         privilege.get("level").getAsInt(),
+                                         privilege.get("allow_party").getAsJsonArray().toString(),
+                                         privilege.get("allow_tag").getAsJsonArray().toString(),
+                                         privilege.get("allow_user").getAsJsonArray().toString(),
+                                         privilege.get("extra_party").getAsJsonArray().toString(),
+                                         privilege.get("extra_tag").getAsJsonArray().toString(),
+                                         privilege.get("extra_user").getAsJsonArray().toString());
+        }
+
+        // TODO 增加填充 t_corp_app_relation
+    }
+
+    @Override
+    public void changeAuth(String suiteId, String corpId) {
+        // TODO 待实现
+        LOGGER.info("receive changeAuth event!suiteId={}, corpId={}", suiteId, corpId);
+    }
+
+    @Override
+    public void cancelAuth(String suiteId, String corpId) {
+        LOGGER.info("receive cancelAuth event! suiteId={}, corpId={}", suiteId, corpId);
+
+        corpInfoDAO.cancelAuth(corpId);
+
+        corpAuthenDAO.cancelAuth(corpId, suiteId);
+    }
+}

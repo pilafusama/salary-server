@@ -1,0 +1,125 @@
+package com.tenpay.wxwork.salary.provider.admin;
+
+import com.tenpay.wxwork.salary.common.BizError;
+import com.tenpay.wxwork.salary.common.BizException;
+import com.tenpay.wxwork.salary.dto.FrontEndResponse;
+import com.tenpay.wxwork.salary.dto.admin.PageHelperParam;
+import com.tenpay.wxwork.salary.dto.admin.SalaryCardInfoResponse;
+import com.tenpay.wxwork.salary.model.SalaryCardInfo;
+import com.tenpay.wxwork.salary.model.SessionInfo;
+import com.tenpay.wxwork.salary.service.IdGenerator;
+import com.tenpay.wxwork.salary.service.SessionService;
+import com.tenpay.wxwork.salary.service.admin.SalaryCardInfoService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+
+
+@RestController
+@RequestMapping("/admin")
+public class SalaryCardInfoController {
+
+    @Autowired
+    private IdGenerator idGenerator;
+    @Autowired
+    private SessionService sessionService;
+    @Autowired
+    private SalaryCardInfoService salaryCardInfoService;
+
+
+    /**
+        查询工资卡信息，返回一个list
+     */
+    @PostMapping(value = "/select_salary_card_info_maintain",
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object salaryCardMaintain(@CookieValue("ssid") String ssid, @RequestBody PageHelperParam pageHelperParam)
+    {
+
+        //1、验证
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpId = session.getCorpId();
+        SalaryCardInfoResponse salaryCardInfoResponse = salaryCardInfoService.selectSalaryCardInfo(corpId,pageHelperParam);
+
+        return salaryCardInfoResponse;
+    }
+
+    /**
+        修改单条工资卡信息
+     */
+    @PostMapping(value = "/update_salary_card_info_maintain",
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object updateCardMaintain(@CookieValue("ssid") String ssid, @RequestBody SalaryCardInfo salaryCardInfo)
+    {
+
+        //1、验证
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+
+        String corpId = session.getCorpId();
+        salaryCardInfo.setCorpid(corpId);
+        Boolean boo_lean = salaryCardInfoService.updateSalaryCardInfo(salaryCardInfo);
+
+        if (boo_lean){
+            return new FrontEndResponse();
+        }else {
+            return new FrontEndResponse("-1","请输入正确的银行卡号！");
+        }
+
+    }
+
+    /**
+     根据企业ID查询员工发卡银行
+     */
+    @PostMapping(value = "/select_bank_sname_by_corpId",
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object salaryBankSname(@CookieValue("ssid") String ssid)
+    {
+
+        //1、验证
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpId = session.getCorpId();
+        SalaryCardInfoResponse salaryCardInfoResponse = salaryCardInfoService.selectBankSname(corpId);
+
+        return salaryCardInfoResponse;
+    }
+
+
+    /**
+     根据企业ID查询员工部门
+     */
+    @PostMapping(value = "/select_department_name_by_corpId",
+            produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public Object salaryDepartmentName(@CookieValue("ssid") String ssid)
+    {
+
+        //1、验证
+        if (!idGenerator.isAdminSessionId(ssid)) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        SessionInfo session = sessionService.getSession(ssid);
+        if (session == null) {
+            throw new BizException(BizError.GET_SESSION_FAILED.errorCode(), BizError.GET_SESSION_FAILED.errorMsg());
+        }
+        String corpId = session.getCorpId();
+        SalaryCardInfoResponse salaryCardInfoResponse = salaryCardInfoService.selectDepartmentName(corpId);
+
+        return salaryCardInfoResponse;
+    }
+}

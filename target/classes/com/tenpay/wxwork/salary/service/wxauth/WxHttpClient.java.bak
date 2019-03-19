@@ -1,0 +1,71 @@
+package com.tenpay.wxwork.salary.service.wxauth;
+
+
+
+import java.util.Calendar;
+
+import org.springframework.cloud.netflix.feign.FeignClient;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import com.google.gson.JsonObject;
+
+
+//https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=ID&corpsecret=SECRECT
+@FeignClient(name = "feignConsumer", url ="${wxworkUrl}")// "https://qyapi.weixin.qq.com/cgi-bin")
+public interface WxHttpClient {
+
+	//通过(应用secret+suit_id获取),拉取应用suit_token
+	@RequestMapping(method = RequestMethod.POST, value = "/service/get_provider_token", consumes = "application/json")
+	public String get_provider_token(@RequestBody String req);
+	
+	//通过(应用secret+suit_id获取),拉取应用suit_token
+	@RequestMapping(method = RequestMethod.POST, value = "/service/get_suite_token", consumes = "application/json")
+	public String get_suite_token(@RequestBody String req);
+	
+	//通过suiteAccessToken和code,拉取企业用户ticket信息
+	@RequestMapping(method = RequestMethod.GET, value = "/service/getuserinfo3rd?access_token={access_token}&code={code}", consumes = "application/json")
+	public String getuserinfo3rd(@PathVariable("access_token") String suiteAccessToken, @PathVariable("code") String  code);
+
+
+	//通过suiteAccessToken和用户ticket,拉取企业用户信息
+	@RequestMapping(method = RequestMethod.POST, value = "/service/getuserdetail3rd?access_token={access_token}", consumes = "application/json")
+	public String getuserdetail3rd(@PathVariable("access_token") String suiteAccessToken, @RequestBody String reqData);
+
+	//通过AccessToken和code,拉取企业用户ticket信息
+	@RequestMapping(method = RequestMethod.POST, value = "/service/get_login_info?access_token={access_token}", consumes = "application/json")
+	public String get_login_info(@PathVariable("access_token") String providerAccessToken, @RequestBody String reqData);	
+	
+	@RequestMapping(method = RequestMethod.POST, value = "/service/get_admin_list?suite_access_token={suiteAccessToken}", consumes = "application/json")
+	public GetAdminListRes get_admin_list(@PathVariable("suiteAccessToken") String suiteAccessToken,@RequestBody GetAdminListReq getAdminListReq);
+
+	//============================ 企业审批应用(审批token）接口 =============================
+	//通过n(企业审批secret+id获取),拉取企业token
+	@RequestMapping(method = RequestMethod.GET, value = "/gettoken?corpid={corpid}&corpsecret={corpsecret}", consumes = "application/json")
+	public String get_token(@PathVariable("corpid") String corpId, @PathVariable("corpsecret") String secret);
+    
+	//通过企业审批token(企业审批secret+id获取),拉取模版
+	@RequestMapping(method = RequestMethod.GET, value = "/corp/getsptemplate?access_token={access_token}", consumes = "application/json")
+	public String getsptemplate(@PathVariable("access_token") String accessToken);
+	
+	//通过企业审批token,订阅模版id，到指定的回调url，{
+	//"tempalte_id": "1970325018031401_1688853906303083_25049724_1513001590",
+	//"callback": ["https://wxwork.tenpay.com/wxwork/data/receive?type=1"]
+	//}
+	@RequestMapping(method = RequestMethod.POST, value = "/corp/spstatussub?access_token={access_token}", consumes = "application/json")
+	public String spstatussub(@PathVariable("access_token") String accessToken, @RequestBody JsonObject String);	
+	
+	//通过企业审批token,拉取审批详情	{
+	//	   "starttime":  1492617600,
+	//	   "endtime":    1492790400,
+	//	   "next_spnum": 201704200003
+	//	}
+	@RequestMapping(method = RequestMethod.POST, value = "/corp/getapprovaldata?access_token={access_token}", consumes = "application/json")
+	public String getapprovaldata(@PathVariable("access_token") String accessToken, @RequestBody String reqData);
+
+	
+	
+		
+}

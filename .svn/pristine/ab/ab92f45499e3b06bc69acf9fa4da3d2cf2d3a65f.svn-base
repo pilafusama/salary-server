@@ -1,0 +1,51 @@
+package com.tenpay.wxwork.salary.provider.admin;
+
+import com.tenpay.wxwork.salary.common.utils.Constant;
+import com.tenpay.wxwork.salary.config.ConfigUtils;
+import com.tenpay.wxwork.wxworklib.service.AuthService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+
+import com.tenpay.wxwork.salary.dto.admin.RegisterCodeRequest;
+import com.tenpay.wxwork.salary.dto.admin.RegisterCodeResponse;
+import com.tenpay.wxwork.salary.service.admin.RegistService;
+
+import javax.annotation.Resource;
+
+@RestController
+@RequestMapping("/admin")
+public class RegistController {
+
+
+	@Autowired
+	private RegistService registService;
+
+	@Resource
+	private AuthService authService;
+
+	/**
+	 * 未注册企业微信，获取注册链接
+	 * @param request
+	 * @return
+	 */
+	@PostMapping(value = "/get_install_url", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+	public Object getInstallUrl(@RequestBody RegisterCodeRequest request) {
+		String register_url = registService.getInstallUrl(request.getPromotion_qrcode_id());		
+		return new RegisterCodeResponse(register_url);
+	}
+	/**
+	 * 已有企业微信的企业，获取企业授权 url
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value = "/get_install_page", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+	public Object getInstallPage(@RequestBody RegisterCodeRequest request) {
+		String suiteId = ConfigUtils.getSuiteId();
+		String state = Constant.PRE_STATE + request.getPromotion_qrcode_id(); //传递的state参数
+		String redirectUrl = ConfigUtils.getBaseUrl()+"salary/h5/corp_auth_callback";// 需要与下方 doCorpAuth 处理的一致
+		String authUrl = authService.genCorpAuthUrl(suiteId, redirectUrl, state);
+		return new RegisterCodeResponse(authUrl);
+	}
+
+}

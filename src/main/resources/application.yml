@@ -1,0 +1,158 @@
+server:
+  port: 8090
+  servlet-path: /salary
+  tomcat:
+    basedir: /data/wxwork/wxwork_salary_server_proj/tomcat/
+    accesslog:
+      enabled: true                     # Enable access log.
+      buffered: true                     # Whether to buffer output such that it is flushed only periodically.
+      directory: logs                    # Directory in which log files are created. Can be absolute or relative to the Tomcat base dir.
+      file-date-format: .yyyy-MM-dd      # Date format to place in the log file name.
+      pattern: common                    # Format pattern for access logs.
+      prefix: access_log                 # Log file name prefix.
+      rename-on-rotate: false            # Whether to defer inclusion of the date stamp in the file name until rotate time.
+      request-attributes-enabled: false  # Set request attributes for the IP address, Hostname, protocol, and port used for the request.
+      rotate: false                      # Whether to enable access log rotation.
+      suffix: .log                       # Log file name suffix.
+
+
+spring:
+  datasource:
+    username: root
+    password: root1234
+    url: jdbc:mysql://10.123.15.77:3306/wxwork_db?characterEncoding=UTF-8&useUnicode=true&autoReconnect=true
+    # username: root
+    # password: wxwork
+    # url: jdbc:mysql://127.0.0.1:3306/wxwork_db?characterEncoding=UTF-8&useUnicode=true&autoReconnect=true
+    driver-class-name: com.mysql.jdbc.Driver
+
+    tomcat:
+      #连接池最大连接数
+      max-active: 100
+      #连接池初始化连接数
+      initial-size: 10
+      #最大等待时间
+      max-wait: 10000
+
+feign:
+  hystrix:
+    enabled: false
+  readTimeoutMillis: 5000
+  connectTimeoutMillis: 5000
+
+agentId: 100010
+
+# 模块 id
+moduleCode: 10251
+
+approvalInfoStartTime: 2017-04-20 00:00:00
+wxworkUrl: https://qyapi.weixin.qq.com/cgi-bin
+
+debug: 0
+sessionExpiresIn: 1800
+
+secret: p94z5kqgbju6dl_Vq-fp7PLAwEfzjNXvQIoSqNBpdYU
+
+ckv:
+  # 是否使用 redis 替代 ckv ，方便本地使用 redis 测试
+  useRedis: true
+  l5mid: 64309505
+  l5cid: 2293760
+  l5bid: access-token
+  l5pwd: redis
+
+  redis:
+    ip: 127.0.0.1
+    port: 6379
+
+# 深海实验室相关
+deepsea:
+  baseurl: https://deepsea.tenpay.com/
+  appsecret: dWp7Klb9mpx97En1laj4EwL7lBh1MQYM
+  appid: fIAnJivRRIjLLNTPXMR0csnJp3m8pBVJ
+
+fingate:
+  appid: fpg_test
+  appkey: 44483fbe704ae13a919107a2fc1eb706
+  cardNumberEncryptPasswd: "%^;*FinPayBANKACCNO!@#$"
+  cardbinUrl: http://10.123.10.104/finance_pay/fpg_cardbin_query.fcgi
+  smsCodeSendUrl: http://10.123.10.104/finance_pay/fpg_sms_code_send.fcgi
+  smsCodeVerifyUrl: http://10.123.10.104/finance_pay/fpg_sms_code_verify.fcgi
+  smsAppid: 386
+  smsTransactionId: 2000000501201704230123456789
+  smsUin: 136101029@wx.tenpay.com
+  smsRelationKey: relation_key_test_1
+  l5:
+    # modid 为0表示禁用 L5
+    modid: 64120705
+    cmdid: 65536
+    timeout: 2.3
+
+# 密钥存储系统
+keystore:
+  keyVersion: 11
+  # 平台私钥及证书
+  salaryPrivateKeyId: p_wxwork_salary_private_key
+  salaryCertId: p_wxwork_salary_cert
+  passwordSaltId: p_wxwork_salary_salt
+  # 工资账户信息加密密钥
+  accountSecretId: p_wxwork_salary_account_secret
+  # 工资详情加密密钥
+  salarySecretId: p_wxwork_salary_salary_secret
+  # openid 加密密钥
+  openidSecretId: p_wxwork_salary_openid_secret
+
+salary:
+  openAccountMsgTemplate: "欢迎，<a href=\"%s\">点我</a>开户"
+  baseUrl: https://testwxwork.tenpay.com/
+  suiteId: ww8e356cec45deb09f
+  salaryDetailMsgTemplate: "您的工资到账了，请及时<a href=\"%s\">查看</a>"
+  
+approval:
+  baseurl: http://127.0.0.1:8081/
+
+# TO BE DELETED
+wxworkdel:
+  suiteSecret: 5O_4DHmQUbaWcMi0eWsPktcRBfF_BmnKC1LNntJ7nI4
+  provider:
+    corpid: wwe897f06e8d6b5fb1
+    secret: DZ4dtob9kzGE6IRKJVKEtRrY-ghAQbVdPT4oFevdr657RHMv2FRZ5pF_Y4OvJB5x
+  getAdminListUrl: https://qyapi.weixin.qq.com/cgi-bin
+  aesKey: xQwg6YPFxxnowEus6Iw9VtDjSIo8odlvtdf9Bi7XeWz
+  token: UTu4Ofl0ch35dTgeCKfc4p3VNQLXBadG
+
+wxworklib:
+  url: https://qyapi.weixin.qq.com/cgi-bin
+
+  # provider 相关信息（服务商）
+  corpId: wwe897f06e8d6b5fb1
+  providerSecret: DZ4dtob9kzGE6IRKJVKEtRrY-ghAQbVdPT4oFevdr657RHMv2FRZ5pF_Y4OvJB5x
+  token: aZ5sMLupVnh3uxhIvj8cUK5PyfyU
+  encodingAESKey: 3Tu7Ihh3bGRFJdCgjT2dccDgOXGrvAuaCi6PByRvVqb
+
+  templateId: tpl698fa9195b8324b7
+  verifyCodeAesKey: av2ATWDocjXDCwnMUrME20OTb8FCnpmFKHQJlPaysCG
+  sessionExpiresIn: 1800
+
+  # 应用相关配置
+  # released 是否已发布上线，会影响企业授权流程
+  suites:
+    -
+      type: 3
+      name: salary
+      released: false
+      id: ww8e356cec45deb09f
+      secret: -SECbATunAYN-FVCa8QN9XmaZFW9lzLrZjkcVt2J644
+      token: rLHFKTraP6p86VfNk5dkPm7guxdqS1tn
+      encodingAESKey: QDTBOmZ9g1Bqy4K2o2cHcVlpFF23poB2p5f9ukal6tP
+
+# 上报 mon 监控
+monitor:
+  udp:
+    enable: false
+    logFlag: wxwork_salary # mon 系统接入模块 id
+    ip: 127.0.0.1
+    port: 6164
+  # caller 相关，非库需要的配置
+  caller:
+    serverName: wxwork_salary_server

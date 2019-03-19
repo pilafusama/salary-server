@@ -1,0 +1,17 @@
+package com.tenpay.wxwork.salary.service.wxauth;
+
+import org.springframework.cloud.netflix.feign.FeignClient;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+
+import com.tenpay.wxwork.salary.config.FeignClientConfiguration;
+import com.tenpay.wxwork.salary.dto.GetAdminListReq;
+import com.tenpay.wxwork.salary.dto.GetAdminListRes;
+
+@FeignClient(name = "wxworkService", url = "${wxwork.getAdminListUrl}",configuration=FeignClientConfiguration.class)
+public interface WxworkService {
+	@RequestMapping(method = RequestMethod.POST, value = "/service/get_admin_list?suite_access_token={suiteAccessToken}", consumes = "application/json")
+	public GetAdminListRes getAdminList(@PathVariable("suiteAccessToken") String suiteAccessToken,@RequestBody GetAdminListReq getAdminListReq);
+}

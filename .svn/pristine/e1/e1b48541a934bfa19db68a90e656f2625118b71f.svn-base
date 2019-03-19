@@ -1,0 +1,13 @@
+relay.server.host=172.21.68.171
+relay.server.port=22007
+relay.connection.timeout=2000
+# 单位秒
+relay.read.timeout.second=10
+relay.client.workerThreadNum=5
+http.connection.timeout=2000
+http.read.timeout=2000
+http.request.timeout=2000
+https.handshake.timeout=2000
+relay.cl5.enable=false
+relay.cl5.modId=123
+relay.cl5.cmdId=234
